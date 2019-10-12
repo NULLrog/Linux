@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 while true
 do
 CHOOSED=$(kdialog --menu "Выберите действие:" 1 Добавить 2 Будильник 3 Удалить 4 Выход); 
@@ -14,7 +14,7 @@ then
 	m=$(echo $TIME | cut -d':' -f2);
 	h=$(echo $TIME | cut -d':' -f1);
 	RESULT="Выберите музыку.\n";
-	MUSIC=$(kdialog --getopenfilename /usr/share/sounds/ '*.ogg');
+	MUSIC=$(kdialog --getopenfilename /usr/share/sounds/mate/default/ '*.ogg');
 	if [ $? -eq 0 ]
 	then
 		RESULT="Выберите дни.\n";
@@ -42,7 +42,7 @@ else
 fi
 ;;
 2)
-echo "ЧЧ:ММ    ДД" > temp;
+echo "N ЧЧ:ММ    ДД" > temp;
 i=2;
 count=$(crontab -l | wc -l);
 let "count=count+1";
@@ -51,7 +51,8 @@ do
 	m=$(crontab -l | head -n"$i" | tail -n1 | cut -d' ' -f1);
 	h=$(crontab -l | head -n"$i" | tail -n1 | cut -d' ' -f2);
 	d=$(crontab -l | head -n"$i" | tail -n1 | cut -d' ' -f5);
-	echo -e "$h:$m         $d" >> temp;
+	let "num=i-1";
+	echo -e "$num $h:$m         $d" >> temp;
 	let "i=i+1";
 done
 kdialog --textbox temp;
