@@ -16,7 +16,7 @@ struct athlet{
 	int countMedals;
 };
 
-void readAthlet(struct athlet *a, int count){
+void readAthlet(struct athlet *a){
 	printf("Введите Фамилию:");
     scanf("%s", a->surname);
     printf("Введите вид спорта:");
@@ -54,6 +54,7 @@ int main(int argc, char **argv){
 	for (int i = 0; i < count; i++) {
 		printAthlet(athlets[i]);
 	}
+	printf("\n");
 	qsort(athlets, count, sizeof(struct athlet*), cmp);
 	printf("Спортсмены после сортировки:\n");
 	for (int i = 0; i < count; i++) {
