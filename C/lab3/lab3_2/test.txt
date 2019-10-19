@@ -1,0 +1,16 @@
+5
+Kovrigin
+Cyber
+2
+Simakin
+Cooking
+0
+Kuznetsov
+Football
+3
+Buratino
+Hockey
+1
+Mubarak
+Run
+0
