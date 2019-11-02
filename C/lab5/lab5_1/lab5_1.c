@@ -4,11 +4,15 @@
 
 #include <stdio.h>
 
+double mypower(double input);
+double mysqrt(double input);
+
 int main(int argc, char **argv) {
-    float x = mypower(4);
-    printf("%f\n", x);
-    //power2(2);
-	//printf("Поиск строк с заданным количеством цифр окончился успешно.\n");
+	double x = 4;
+    double y = mypower(x);
+    printf("Квадрат числа %f = %f\n", x, y);
+    y = mysqrt(x);
+	printf("Корень числа %f = %f\n", x, y);
     return 0;
 }
 

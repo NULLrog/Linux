@@ -12,4 +12,7 @@ liblab5_2.so : f.o
 	gcc -shared -o liblab5_2.so f.o -lm
 
 f.o : f.c
-	gcc -c -fPIC f.c
+	gcc -c -fPIC f.c 
+
+clean:
+	rm -r *.o || rm -r *.a
