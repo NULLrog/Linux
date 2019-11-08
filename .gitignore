@@ -1,7 +1,5 @@
-5# Lines starting with '#' are considered comments.
-# Ignore any executable files
+# Lines starting with '#' are considered comments.
+# Ignore any executable, object and etc files
 *
-!*.*
+!*.c
 !Makefile
-# Ignore any object files
-*.o
