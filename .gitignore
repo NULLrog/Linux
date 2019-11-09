@@ -1,6 +1,5 @@
 # Lines starting with '#' are considered comments.
-# Ignore any executable, object and etc files
-*
-!*.c
-!Makefile
-!C/lab*
+# Ignore any object and etc files
+*.a
+*.o
+*.so
