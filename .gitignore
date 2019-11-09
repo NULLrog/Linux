@@ -3,4 +3,4 @@
 *
 !*.c
 !Makefile
-!/lab*
+!C/lab*
