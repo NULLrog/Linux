@@ -11,6 +11,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <signal.h>
 
 #define HONEY 500
 #define BEAR 300
@@ -29,6 +30,11 @@ union semun {
 
 struct sembuf lock_res = {0, -1, 0};
 struct sembuf rel_res = {0, 1, 0};
+
+void sighandler(int signum) {
+	printf("Сигнал о смерти медведя получен!\n");
+	exit(0);
+}
 
 void attach() {
     if ((shm = (int *)shmat(shmid, NULL, 0)) == (int *) -1) {
@@ -94,13 +100,14 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < atoi(argv[1])+1; i++) {
         pid[i] = fork();
-
+		
         if (pid[i] == -1) {
             perror("Ошибка создания пчелы или медведя!\n");
             exit(-6);
         }
 
         else if (pid[i] == 0) {
+			signal(SIGTERM, sighandler);
             while(bearDeath!=1) {
                 attach();
                 semlock(i);
@@ -108,6 +115,8 @@ int main(int argc, char *argv[]) {
                     if (*shm < BEAR) {
                         printf("МЕДВЕДЬ: Приказал жить долго, мёда осталось %d!\n", *shm);
                         bearDeath = 1;
+                        for (int j = 0; j < atoi(argv[1]); j++)
+							kill(pid[i], SIGTERM);	
                         semrel(i);
                         detach();
                         exit(1);
