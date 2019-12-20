@@ -8,11 +8,6 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
-void error(const char *msg) {
-    perror(msg);
-    exit(0);
-}
-
 int main(int argc, char *argv[]) {
     int my_sock, n;
     int entered = 0;
