@@ -1,0 +1,12 @@
+prefix=/home/gleb/cross/build
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: GObject
+Description: GLib Type, Object, Parameter and Signal Library
+Requires: glib-2.0
+Version: 2.53.4
+Libs: -L${libdir} -lgobject-2.0
+Libs.private: -L/home/gleb/cross/build/lib -lffi
+Cflags:
