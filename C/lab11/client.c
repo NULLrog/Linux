@@ -8,6 +8,8 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 
+#define PORT 12345
+
 int main(int argc, char *argv[]) {
     int my_sock, n;
     int entered = 0;
@@ -21,7 +23,7 @@ int main(int argc, char *argv[]) {
     }
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(12345);
+    serv_addr.sin_port = htons(PORT);
     serv_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     if (connect(my_sock,(struct sockaddr *) &serv_addr,sizeof(serv_addr)) < 0){

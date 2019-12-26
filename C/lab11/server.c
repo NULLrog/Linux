@@ -18,10 +18,12 @@
 #include <netinet/in.h>
 
 #define MAPSIZE 5
+#define PORT 12345
+#define SIZE 1024
 int **map = NULL;
 
 int myfunc(int num, int pi, int pj, int sock) {
-    char buff[1024];
+    char buff[SIZE];
     int captured = 0;
     if(num == 0) {
         if(pi > MAPSIZE/2) {
@@ -66,7 +68,7 @@ int myfunc(int num, int pi, int pj, int sock) {
 void dostuff (int sock) {
     int n, status;
     int count;
-    char buff[1024];
+    char buff[SIZE];
     char str1[] = "Введите количество самолетов";
     send(sock, &str1, strlen(str1), 0);
     if (((n = recv(sock, &buff[0], sizeof(buff) - 1, 0)) < 0)) {
@@ -115,7 +117,7 @@ int **createMas(int count) {
 }
 
 int main(int argc, char *argv[]) {
-    char buff[1024];
+    char buff[SIZE];
     printf("СЕРВЕР: начало работы\n");
     map = createMas(MAPSIZE);
     int sockfd, newsockfd;
@@ -128,7 +130,7 @@ int main(int argc, char *argv[]) {
     }
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(12345);
+    serv_addr.sin_port = htons(PORT);
 
     if (bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(serv_addr)) < 0) {
         perror("Сокет не был привязан!\n");
@@ -153,7 +155,9 @@ int main(int argc, char *argv[]) {
             close(newsockfd);
     }
     close(sockfd);
+    for (int i = 0; i < MAPSIZE; i++){
+        free(map[i]);
+    }
+    free(map);
     return 0;
 }
-
-

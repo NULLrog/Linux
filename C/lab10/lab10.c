@@ -62,5 +62,9 @@ int main(int argc, char *argv[]) {
 		pthread_join(threads[i], NULL);
 		printf("Поток %lu завершился!\n", threads[i]);	
 	}
+	for (int i = 0; i < atoi(argv[1]); i++){
+        free(mas[i]);
+    }
+    free(mas);
     return 0;
 }
