@@ -1,0 +1,341 @@
+﻿ЛАБОРАТОРНАЯ РАБОТА №8
+МЕЖПРОЦЕССНЫЕ КОММУНИКАЦИИ В LINUX. ОЧЕРЕДИ СООБЩЕНИЙ.
+
+1. ЦЕЛЬ РАБОТЫ: 
+Изучить способы и средства обмена информацией между процессами средствами очередей сообщений в программах на языке C в операционных системах семейства Linux.
+
+2. КРАТКИЕ ТЕОРЕТИЧЕСКИЕ СВЕДЕНИЯ.
+Существует два подхода к организации межпроцессного взаимодействия (InterProcess Communication, IPC): System V IPC и POSIX IPC. 
+Первый является «родным» для UNIX и с его помощью реализовано большое количество существующих приложений. Второй призван обеспечить переносимость программного обеспечения.
+Каждой очереди сообщений System V сопоставляется свой идентификатор очереди сообщений. Любой процесс с соответствующими привилегиями может поместить сообщение в очередь, и любой процесс с другими соответствующими привилегиями может сообщение из очереди считать. Для помещения сообщения в очередь System V не требуется наличия подключенного к ней на считывание процесса.
+Ядро хранит информацию о каждой очереди сообщений в виде структуры, определенной в заголовочном файле <sys/msg.h>:
+struct msqid_ds {
+	struct ipc_perm msg_perm;	/* Разрешения чтения и записи */
+	struct msg *msg_first;/* указатель на первое сообщение в очереди */
+	struct msg *msg_last;	/* указатель на последнее сообщение в очереди */
+	msglen_t msg_cbytes;	/* размер очереди в байтах */
+	msgqnum_t msg_qnum;		/* количество сообщений в очереди */
+	msglen_t msg_qbytes;	/* максимальный размер очереди в байтах */
+	pid_t msg_lspid; /* идентификатор (pid) последнего процесса, вызвавшего 	msgsnd(); */
+	pid_t msg_lrpid;	/* pid последнего msgrcv() */
+	time_t msg_stime;	/* время отправки последнего сообщения */
+	time_t msg_rtime;	/* время последнего считывания сообщения */
+	time_t msg_ctime;	/* время последнего вызова msgctl()*/
+}
+
+Создать новую очередь сообщений или получить доступ к существующей можно с помощью функции msgget:
+	#include <sys/msg.h> 
+	int msgget(key_t key, int oflag);
+	/* Возвращает неотрицательный идентификатор
+	 в случае успешного завершения, -1 в случае ошибки 
+	*/
+Возвращаемое значение представляет собой целочисленный идентификатор, используемый тремя другими функциями msg для обращения к данной очереди. Идентификатор вычисляется на основе указанного ключа, который может быть получен с помощью функции ftok или может представлять собой константу IPC_PRIVATE. Флаг oflag представляет собой комбинацию разрешений чтения-записи. К разрешениям можно добавить флаги IРС_СRЕАТ или IPC_CREAT | IPC_EXCL с помощью логического сложения.
+После открытия очереди сообщений с помощью функции msgget можно помещать сообщения в эту очередь с помощью msgsnd.
+	int msgsnd(int msqid, const void *ptr, size_t length, int flag);
+	/* Возвращает 0 в случае успешного завершения; -1 - в случае ошибки */
+
+Здесь msqid представляет собой идентификатор очереди, возвращаемый msgget. Указатель рtr указывает на структуру следующего шаблона, определенного в <sys/msg.h>:
+	struct msgbuf {
+		long mtype; /* тип сообщения, должен быть > О */ 
+		char mtext[1]; /* данные */
+	};
+
+Тип сообщения должен быть больше нуля, поскольку неположительные типы используются в качестве специальной команды функции msgrcv. Аргумент length функции msgsnd указывает длину сообщения в байтах. Это длина пользовательских данных, следующих за типом сообщения (целое типа long). Длина может быть и 0. Аргумент flag может быть либо 0, либо IPC_NOWAIT. В последнем случае он отключает блокировку для msgsnd: если для нового сообщения недостаточно места в очереди, возврат из функции происходит немедленно.
+Сообщение может быть считано из очереди с помощью функции msgrcv.
+	ssize_t msgrcv(int msqid, void *ptr, size_t length, long type, int flag};
+	/* Возвращает количество данных в сообщении. -1 - в случае ошибки */
+
+Аргумент ptr указывает, куда следует помещать принимаемые данные. Как и для msgsnd, он указывает на поле данных типа long, которое непосредственно предшествует полезным данным. Аргумент length задает размер относящейся к полезным данным части буфера, на который указывает ptr. Это максимальное количество данных, которое может быть возвращено функцией. Поле типа long не входит в эту длину.
+Для подсчета length используйте следующую формулу:
+	length  = sizeof(struct msgbuf) — sizeof(long);
+
+Аргумент type определяет тип сообщения, которое нужно считать из очереди:
+если значение type равно 0, возвращается первое сообщение в очереди (то есть при указании типа 0 возвращается старейшее сообщение);
+если тип больше 0, возвращается первое сообщение, тип которого равен указанному;
+если тип меньше нуля, возвращается первое сообщение с наименьшим типом, значение которого меньше либо равно модулю аргумента type.
+Аргумент flag указывает, что делать, если в очереди нет сообщения с запрошенным типом. Если установлен бит IPC_NOWAIT, происходит немедленный возврат из функции msgrcv с кодом ошибки ENOMSG. В противном случае вызвавший процесс блокируется до тех пор, пока не произойдет одно из следующего: 
+появится сообщение с запрошенным типом; 
+очередь с идентификатором msqid будет удалена из системы (в этом случае будет возвращена ошибка с кодом EIDRM); 
+вызвавший поток будет прерван перехватываемым сигналом (в этом случае возвращается ошибка EINTR).
+В аргументе flag можно указать дополнительный бит MSG_NOERROR. При установке этого бита данные, превышающие объем буфера (аргумент length), будут просто обрезаться до его размера без возвращения кода ошибки. Если этот флаг не указать, при превышении объемом сообщения аргумента length будет возвращена ошибка E2BIG.
+В случае успешного завершения работы msgrcv возвращает количество байтов в принятом сообщении. Оно не включает байты, нужные для хранения типа сообщения (long), который также возвращается через указатель ptr.
+Функция msgctl позволяет управлять очередями сообщений:
+	int msgctl(int msqid, int cmd, struct msqid_ds *buff);
+	/* Возвращает 0 в случае успешного завершения, -1 в случае ошибки */
+
+Команд (аргумент cmd) может быть три:
+1. IPC_RMID — удаление очереди с идентификатором msqid из системы. Все сооб­щения, имеющиеся в этой очереди, будут утеряны. Для этой команды третий аргумент функции игнорируется.
+2. IPC_SET — установка значений четырех полей структуры msqid_ds данной оче­реди равными значениям соответствующих полей структуры, на которую ука­зывает аргумент buff: msg_perm.uid, msg_perm.gid, msg_perm.mode, msg_qbytes.
+3. IPC_STAT — возвращает вызвавшему процессу (через аргумент buff) текущее содержимое структуры msqid_ds для указанной очереди.
+Пример:
+//--- msg_simple.c
+#include <stdio.h>
+#include <sys/msg.h>
+#include <stdlib.h>
+struct msgbuf {
+		long mtype; /* тип сообщения, должен быть > О */ 
+		char mtext[1]; /* данные */
+	};
+int main(int argc, char **argv){
+	int msqid, n;
+	struct msqid_ds info;
+	struct msgbuf buf;
+	msqid = msgget(IPC_PRIVATE, 0600|IPC_CREAT);
+	buf.mtype = 1;
+	buf.mtext[0] = 'A';
+	msgsnd(msqid, &buf, 1, 0);
+	msgctl(msqid, IPC_STAT, &info);
+	printf("read-write: %o, cbytes = %lu, qnum = %lu, qbytes =%lu\n", 
+		(ulong)info.msg_perm.mode, (ulong) info.msg_cbytes,
+		(ulong) info.msg_qnum, (ulong) info.msg_qbytes);
+		
+	n = msgrcv(msqid, &buf, 1, buf.mtype, IPC_NOWAIT);
+	printf("read %d bytes, type=%ld : %c\n",n,buf.mtype,buf.mtext[0]);
+	msgctl(msqid, IPC_RMID, NULL);
+	return 0;
+}
+//---------------
+Примеры клиент-серверных приложений, использующих очереди сообщений находятся здесь: http://gun.cs.nstu.ru/ssw/SysVmsg, так же доступны в каталоге ../src/8.
+Пример использования очередей для межпроцессной комуникации для передачи сложной структуры:
+//--- mymsg.h
+#ifndef __MYMSG_H__
+#define __MYMSG_H__
+
+#include<string.h>
+#include<time.h>
+#include<sys/ipc.h>
+#include<sys/msg.h>
+#include<sys/errno.h>
+
+#define MSGPERM 0600    // msg queue permission
+#define MSGTXTLEN 128   // msg text length
+#define MSGKEY 32769
+struct msg_buf {
+  long mtype;
+  char mtext[MSGTXTLEN];
+  int len;
+} msg;
+#endif
+
+//--- send.c
+#include <stdio.h>
+#include "mymsg.h"
+#include <sys/types.h>
+#include <unistd.h>
+
+int get_queue_ds( int qid, struct msqid_ds *qbuf ){
+	if( msgctl( qid, IPC_STAT, qbuf) == -1){
+                return(-1);
+    }
+    return(0);
+}
+
+int main(int argc, char **argv){
+	int msgqid, rc;
+	msgqid = msgget(MSGKEY, MSGPERM|IPC_CREAT|IPC_EXCL);
+	if (msgqid < 0) {
+		perror(strerror(errno));
+		printf("failed to create message queue with msgqid = %d\n", msgqid);
+		return 1;
+	} else 
+		printf("message queue %d created\n",msgqid);
+
+	// message to send
+	msg.mtype = 1; // set the type of message
+	msg.len = sizeof(msg)-sizeof(long);//getpid();
+	sprintf (msg.mtext, "%s\n", "a text msg..."); 
+	printf ("a len msg = %d\n", msg.len); 
+
+	// send the message to queue
+	rc = msgsnd(msgqid, &msg, sizeof(msg)-sizeof(long), 0); 
+	// the last param can be: 0, IPC_NOWAIT, MSG_NOERROR, or IPC_NOWAIT|MSG_NOERROR.
+	if (rc < 0) {
+		perror( strerror(errno) );
+		printf("msgsnd failed, rc = %d\n", rc);
+		return 1;
+	} else
+		printf("Message send done!\n");
+		
+	return 0;
+}
+//--- recv.c
+#include <stdio.h>
+#include "mymsg.h"
+int main(int argc, char **argv){
+	int msgqid, rc;
+	
+	msgqid = msgget(MSGKEY, MSGPERM|IPC_EXCL);
+	if (msgqid < 0) {
+		perror(strerror(errno));
+		printf("failed to create message queue with msgqid = %d\n", msgqid);
+		return 1;
+	} else 
+		printf("message queue %d created\n", msgqid);
+	// read the message from queue
+	rc = msgrcv(msgqid, &msg, sizeof(msg)-sizeof(long), 0, 0); 
+	if (rc < 0) {
+		perror( strerror(errno) );
+		printf("msgrcv failed, rc=%d\n", rc);
+		return 1;
+	} 
+	printf("received msg: %s\n", msg.mtext);
+	printf("received len: %d\n", msg.len);
+
+	// remove the queue
+	rc=msgctl(msgqid,IPC_RMID,NULL);
+	if (rc < 0) {
+		perror( strerror(errno) );
+		printf("msgctl (return queue) failed, rc=%d\n", rc);
+		return 1;
+	}
+	printf("message queue %d is gone\n",msgqid);	
+	return 0;
+}
+
+//---------------
+Пример использования очередей для межпроцессной комуникации для передачи строки:
+//--- fork_msg.c
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <wait.h>
+#include <fcntl.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/errno.h>
+
+#define MAX_SEND_SIZE 80
+
+struct mymsgbuf {
+        long mtype;
+        char mtext[MAX_SEND_SIZE];
+};
+
+int msgqid, rc;
+
+void send_message(int qid, struct mymsgbuf *qbuf, long type, char *text){
+        qbuf->mtype = type;
+        strcpy(qbuf->mtext, text);
+
+        if((msgsnd(qid, (struct msgbuf *)qbuf,
+                strlen(qbuf->mtext)+1, 0)) ==-1){
+                perror("msgsnd");
+                exit(1);
+        }
+}
+
+void read_message(int qid, struct mymsgbuf *qbuf, long type){
+        qbuf->mtype = type;
+        msgrcv(qid, (struct msgbuf *)qbuf, MAX_SEND_SIZE, type, 0);
+        printf("Type: %ld Text: %s\n", qbuf->mtype, qbuf->mtext);
+}
+
+int main(int argc, char *argv[]) {
+    int i, pid[argc], status, stat;
+    key_t key;
+    int qtype = 1;
+    struct mymsgbuf qbuf;
+    
+    if (argc < 2) {
+        printf("Usage: ./fork_many text text ...\n");
+        exit(-1);
+    }
+    
+    key = ftok(".", 'm');
+	if((msgqid = msgget(key, IPC_CREAT|0660)) == -1) {
+		perror("msgget");
+		exit(1);
+	}
+        
+    for (i = 1; i < argc; i++) {
+        // запускаем дочерний процесс 
+        pid[i] = fork();
+        srand(getpid());
+
+        if (-1 == pid[i]) {
+            perror("fork"); /* произошла ошибка */
+            exit(1); /*выход из родительского процесса*/
+        } else if (0 == pid[i]) {
+            printf(" CHILD: Это %d процесс-потомок СТАРТ!\n", i);
+            sleep(rand() % 4);
+            printf(" CHILD: Это %d процесс-потомок ВЫХОД!\n", i);
+            
+            char str[10];
+            sprintf(str, "%d", (int)strlen(argv[i]));
+            send_message(msgqid, (struct mymsgbuf *)&qbuf,
+                                       qtype, str); 
+			printf(" CHILD: Это %d процесс-потомок отправил сообщение!\n", i);
+			fflush(stdout);
+            exit(0); /* выход из процесс-потомока */
+        }
+    }
+    // если выполняется родительский процесс
+    printf("PARENT: Это процесс-родитель!\n");
+    // ожидание окончания выполнения всех запущенных процессов
+    for (i = 1; i < argc; i++) {
+        status = waitpid(pid[i], &stat, 0);
+        if (pid[i] == status) {
+            printf("процесс-потомок %d done,  result=%d text=%s\n", i, WEXITSTATUS(stat), argv[i]);
+            fflush(stdout);
+        }
+    }
+
+    for (i = 1; i < argc; i++) {
+		        read_message(msgqid, &qbuf, qtype); 
+	}
+	
+	if ((rc = msgctl(msgqid, IPC_RMID, NULL)) < 0) {
+		perror( strerror(errno) );
+		printf("msgctl (return queue) failed, rc=%d\n", rc);
+		return 1;
+	}
+    return 0;
+}
+//---------------
+
+?===============?
+3. МЕТОДИЧЕСКИЕ УКАЗАНИЯ. 
+3.1. Для обмена данными между процессами использовать исключительно очереди сообщений System V.
+3.2. Для ознакомления с функциями работы с каналами и очередями сообщений используйте инструкции man msgget, man msgsnd, man msgrcv, man msgctl.
+3.3. Для отладки рекомендуется использовать отладчик gdb, информацию котором можно получить инструкцией man gdb.
+3.4. Для отладки и запуска программ, протоколирования их результатов и сохранения на локальном компьютере см. методические указания к лабораторной работе №6.
+
+4. ПОРЯДОК ВЫПОЛНЕНИЯ РАБОТЫ. 
+4.1. Модифицировать и отладить в соответствии с вариантом и выбранным средством коммуникации программу из лабораторной работы №6, реализующую порожденный процесс. При необходимости модифицировать ее в отдельную программу-сервер.
+4.2. Модифицировать и отладить в соответствии с вариантом и выбранным средством коммуникации программу из лабораторной работы №6, реализующую родительский процесс. При необходимости модифицировать ее в отдельную программу-клиент.
+
+5. ВАРИАНТЫ ЗАДАНИЙ. 
+См. варианты заданий в файле variants.txt.
+?===============?
+
+6. КОНТРОЛЬНЫЕ ВОПРОСЫ. 
+1. Какую информацию можно получить об очереди и где она хранится?
+2. Как создаются очереди сообщений?
+3. Какова структура сообщения для записи/чтения в/из очереди?
+5. Зачем нужны права на очередь? Какими они могут быть?
+5. Чтение сообщения из очереди. Особенности.
+6. Перечислите возможные причины блокировки работы программы при использовании очередей и способы их устранения.
+7. Возможные ошибки при чтении из очереди, причины их возникновения.
+8. В чем заключается управление очередями?
+9. Какие системные команды служат для работы с очередями?
+10. Запись сообщения в очередь. Особенности.
+
+!===============!
+СОСТАВИТЕЛИ:
+Гунько А.В., канд. техн. наук, доц. НГТУ
+Чистяков Н.А., инженер НГТУ
+!===============!
+
+!===============!
+ССЫЛКИ:
+http://gun.cs.nstu.ru/ssw/svmsg.zip
+http://gun.cs.nstu.ru/ssw/SysVmsg/
+https://www.opennet.ru/base/dev/ipc_msg.txt.html
+http://liuweipingblog.cn/cpp/message-queue-example-msgget-msgctl-msgsnd-msgrcv/
+http://www.tldp.org/LDP/lpg/node21.html
+http://rus-linux.net/MyLDP/BOOKS/lpg-04/node6.htm
+
+!===============!
