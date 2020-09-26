@@ -1,0 +1,418 @@
+﻿ЛАБОРАТОРНАЯ РАБОТА №10
+МНОГОПОТОЧНОЕ ПРОГРАММИРОВАНИЕ В LINUX
+
+1. ЦЕЛЬ РАБОТЫ: 
+Освоить функции создания потоков и синхронизации их при помощи взаимных исключений.
+
+2. КРАТКИЕ ТЕОРЕТИЧЕСКИЕ СВЕДЕНИЯ.
+
+Для работы с потоками существуют следующие основные функции:
+
+PTHREAD_CREATE
+------------------
+pthread_create(
+	pthread_t *tid, 
+	const pthread_attr_t *attr, 
+	void*(*function)(void*), 
+	void* arg)
+- создает поток для выполнения функции function. 
+Первый параметр tid этой функции представляет собой указатель на переменную типа pthread_t, которая служит идентификатором создаваемого потока. Индентификатор нового потока возвращается через tid.
+Второй параметр, указатель на переменную типа pthread_attr_t, используется для передачи атрибутов потока. Поток создается с параметрами attr.
+Третьим параметром функции pthread_create() должен быть адрес функции function потока.
+В качестве параметра для потоковой функции передается указатель arg.
+Четвертый параметр функции pthread_create() имеет тип void *. Этот параметр может использоваться для передачи значения, возвращаемого функцией потока. 
+Функция потока должна иметь заголовок вида:
+	void * func_name(void * arg)
+
+Имя функции, естественно, может быть любым. 
+Аргумент arg, - это тот самый указатель, который передается в последнем параметре функции pthread_create(). 
+Функция потока может вернуть значение, которое затем будет проанализировано заинтересованным потоком, но это не обязательно. 
+Завершение функции потока происходит если:
+	- функция потока вызвала функцию pthread_exit(3); 
+	- функция потока достигла точки выхода; 
+	- поток был досрочно завершен другим потоком. 
+
+PTHREAD_JOIN
+------------------
+pthread_join(pthread_t tid, void **statusp) - ожидает завершение неотсоединенного процесса, результат возвращаемый функцией сохраняется в statusp.
+Первый параметр pthread_join(), – это идентификатор потока, второй параметр имеет тип «указатель на нетипизированный указатель». 
+В этом параметре функция pthread_join() возвращает значение, возвращенное функцией потока.
+Основная задача функции pthread_join() заключается, однако, в синхронизации потоков.
+Вызов функции pthread_join() приостанавливает выполнение вызвавшего ее потока до тех пор, пока поток, чей идентификатор передан функции в качестве аргумента, не завершит свою работу.
+Если в момент вызова pthread_join() ожидаемый поток уже завершился, функция вернет управление немедленно.
+Функцию pthread_join() можно рассматривать как эквивалент waitpid(2) для потоков.
+Эта функция позволяет вызвавшему ее потоку дождаться завершения работы другого потока.
+Попытка выполнить более одного вызова pthread_join() (из разных потоков) для одного и того же потока приведет к ошибке.
+Если при создании нового потока требуется знать, как он будет впоследствии уничтожен, необходимо использовать присоединяемый(joinable) поток. 
+Для присоединяемых потоков в системе выделяется приватная область, в которой сохраняется статус уничтожения потока. 
+После уничтожения потока этот статус обновляется; получить его можно с помощью функции pthread_join(pthread_t thread, void** value_ptr). 
+Для каждого потока, включая его стек, идентификатор, статус уничтожения и т. д., в системе выделяется специальная область памяти, которая остается в адресном пространстве процесса (и не очищается) до тех пор, пока поток не уничтожается и не присоединяется к другим потокам.
+//--- threads.c
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <pthread.h>
+void *thread_func(void *arg){
+	int i;
+	int loc_id = * (int *) arg;
+	for (i = 0; i < 4; i++) {
+		printf("Thread %i is running\n", loc_id);
+		sleep(1);
+	}
+	pthread_exit(NULL);
+}
+
+int main(int argc, char * argv[]){
+	int id1, id2, result;
+	pthread_t thread1, thread2;
+	id1 = 1;
+	result = pthread_create(&thread1, NULL, thread_func, &id1);
+	if (result != 0) {
+		perror("Creating the first thread");
+		return EXIT_FAILURE;
+	}
+
+	id2 = 2;
+	result = pthread_create(&thread2, NULL, thread_func, &id2);
+	if (result != 0) {
+		perror("Creating the second thread");
+		return EXIT_FAILURE;
+	}
+
+	result = pthread_join(thread1, NULL);
+	if (result != 0) {
+		perror("Joining the first thread");
+		return EXIT_FAILURE;
+	}
+
+	result = pthread_join(thread2, NULL);
+	if (result != 0) {
+		perror("Joining the second thread");
+		return EXIT_FAILURE;
+	}
+
+	printf("Done\n");
+	return EXIT_SUCCESS;
+}
+
+//---------------
++===============+
+$ gcc -Wall -o threads threads.c -std=c99 -lpthread
+$ ./threads
++===============+
+
+PTHREAD_EXIT
+------------------
+pthread_exit(void *status) - завершает процесс, статус передается вызову
+pthread_join, подобен exit(). Но вызов exit() в процессе приведет к завершению 
+всей программы. Функция pthread_exit() представляет собой потоковый аналог функции _exit(). 
+Аргумент функции pthread_exit(), значение типа void *, становится возвращаемым значением функции потока.
+Процесс завершается двумя путями - вызовом pthread_exit() или завершением потоковой функции
+В случае, если процесс неотсоединен, то при его завершении ресурсы, выделенные процессу, не освобождаются до вызова pthread_join().
+Если процесс отсоединенный — ресурсы освобождаются по ее завершению.
+//--- threads2.c
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <pthread.h>
+#define N 5
+struct DATA{
+	int a;
+	int h;
+};
+typedef struct DATA Data;
+ 
+void *square_of_triangle(void *arg){
+	Data* a = (Data*)arg;
+	double *ps = (double*)malloc(sizeof(double)); 
+	*ps = 0.5 *a->a * a->h;
+	sleep(1);
+	printf("square=%f\n", *ps);
+	pthread_exit((void*)ps);
+	//return (void*)ps;
+}
+
+int main(int argc, char * argv[]){
+	int result;
+	pthread_t threads[N];
+	Data data[N];
+	void *status[N];
+	
+	for (int i = 0; i < N; i++){
+		data[i].a = i+1;
+		data[i].h = (i+1)*N;
+		result = pthread_create(&threads[i], NULL, square_of_triangle, &data[i]);
+		if (result != 0) {
+			perror("Creating the first thread");
+			return EXIT_FAILURE;
+		}	
+	}
+
+	for (int i = 0; i < N; i++){
+		result = pthread_join(threads[i], &status[i]);
+		if (result != 0) {
+			perror("Joining the first thread");
+			return EXIT_FAILURE;
+		} else {
+			printf("square[%d]=%f\n", i,  *((double*)status[i]));
+		}
+		free(status[i]);
+	}
+
+	printf("Done..\n");
+	return EXIT_SUCCESS;
+}
+//---------------
++===============+
+$ gcc -Wall -o threads2 threads2.c -std=c99 -lpthread
+$ ./threads2
++===============+
+
+PTHREAD_DETACH
+------------------
+pthread_detach(pthread_t tid) - отсоединяет поток. Это же можно задать при создании потока, установив аттрибут detachstate вызовом pthread_attr_setdetachstate. Для вычислений используются отсоединенные(detached) потоки, отсоединение происходит вызовом pthread_detach().
+Если используются detached потоки, в момент их уничтожения все выделяемые системные ресурсы очищаются автоматически.
+ 
+Если создать присоединяемый(joinable) поток и забыть присоединить его pthread_join, все выделенные ему ресурсы памяти останутся в адресном пространстве процесса и никогда не будут освобождены. 
+Всегда присоединяйте присоединяемые потоки, в противном случае могут возникать серьезные утечки памяти.
+//--- detach.c
+#include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
+#include <unistd.h>
+#include <pthread.h>
+#define N 5
+
+void *func(void *arg){
+	for (int i = 0; i<5; i++){
+		sleep(1);
+		printf("pthread id=%d iteration i=%d\n", pthread_self(), i);
+	}
+	return NULL;
+}
+
+int main(int argc, char * argv[]){
+	int result;
+	pthread_t threads[N];
+	
+	for (int i = 0; i < N; i++){
+		result = pthread_create(&threads[i], NULL, func, NULL);
+		if (result != 0) {
+			perror("Creating the first thread");
+			return EXIT_FAILURE;
+		} else {
+			pthread_detach(threads[i]);
+		}
+			
+	}
+	sleep(N*2);
+	printf("Done..\n");
+	return EXIT_SUCCESS;
+}
+//---------------
+
+PTHREAD_MUTEX_INIT
+------------------
+pthread_mutex_init(
+	pthread_mutex_t* lock,
+	pthread_mutexattr_t *attr)
+ - инициализирует взаимоисключающую блокировку.
+Attr - содержит аттрибуты для взаимоисключающей блокировки.
+В случае, если attr == NULL, используются установки по умолчаниию.
+
+PTHREAD_MUTEX_DESTROY
+------------------
+pthread_mutex_destroy(pthread_mutex_t* lock) — удаляет взаимоисключающую блокировку.
+
+PTHREAD_MUTEX_LOCK
+------------------
+pthread_mutex_lock(pthread_mutex_t* lock) — устанавливает блокировку.
+В случае, если блокировка была установлена другим процессом, текущий процесс останавливается до снятия блокировки другим процессом.
+
+PTHREAD_MUTEX_UNLOCK
+------------------
+pthread_mutex_unlock(pthread_mutex_t* lock) - снимает блокировку.
+ 
+Взаимное исключение (mutex) является простейшей формой синхронизации. Оно используется для защиты критической области (critical region), предотвращая одновременное выполнение участка кода несколькими потоками (если взаимное исключение используется потоками) или процессами (если взаимное исключение пользуется несколькими процессами). Выглядит это обычно следующим образом.
+	блокировать_mutex(    );
+	критическая область 
+	разблокировать_mutex(.   );
+
+Поскольку только один поток может заблокировать взаимное исключение в любой момент времени, это гарантирует, что только один поток будет выполнять код, относящийся к критической области.
+Взаимные исключения по стандарту Posix объявлены как переменные с типом pthread_mutex_t. Если переменная-исключение выделяется статически, ее можно инициализировать константой PTHREAD_MUTEX_INITIALIZER: 
+	static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
+
+При динамическом выделении памяти под взаимное исключение (например, вызовом malloc) мы должны инициализировать эту переменную во время выполнения, вызвав функцию pthread_mutex_init.
+Следующие три функции используются для установки и снятия блокировки взаимного исключения:
+	#include <pthread.h>
+	int pthread_mutex_lock(pthread_mutex_t *mptr);
+	int pthread_mutex_trylock(pthread_mutex_t *mptr);
+	int pthread_mutex_unlock(pthread_mutex_t *mptr);
+
+Все три возвращают 0 в случае успешного завершения  положительное значение Еххх - в случае ошибки.
+При попытке заблокировать взаимное исключение, которое уже заблокировано  другим потоком, функция pthread_mutex_lock будет ожидать его разблокирования, a pthread_mutex_trylock (неблокируемая функция) вернет ошибку с кодом BUSY.
+Одна из классических задач на синхронизацию называется задачей производителя и потребителя. 
+Один или несколько производителей (потоков или процессов) создают данные, которые обрабатываются одним или несколькими потребителями. Эти данные передаются между производителями и потребителями с помощью одной из форм IPC. Схема рассматриваемого примера изображена на рис. 10.4.1.png
+В одном процессе имеется несколько потоков-производителей и один поток-потребитель. Целочисленный массив buff содержит производимые и потребляемые данные (данные совместного пользования) Для простоты производители просто устанавливают значение buff[0] в 0, buff[1] в 1 и т. д. Потребитель перебирает элементы массива, проверяя правильность записей. Поток-потребитель не будет запущен, пока все производители не завершат свою работу.Программа ожидает завершения работы всех потоков-производителей, выводя содержимое счетчика для каждого потока, и потока-потребителя. Ниже приведен текст программы:
+//--- prodcons1.c
+#include <pthread.h>
+#include <sys/types.h> 
+#include <sys/stat.h> 
+#include <wait.h> 
+#include <fcntl.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+
+#define	MAXNITEMS 1000000
+#define	MAXNTHREADS 100
+#define	min(a,b)	((a) < (b) ? (a) : (b))
+#define	max(a,b)	((a) > (b) ? (a) : (b))
+
+static int nitems, potok; /* только для чтения потребителем и производителем */
+struct {
+	pthread_mutex_t	mutex;
+	int	buff[MAXNITEMS];
+	int	nput;
+	int	nval;
+} shared = { 
+	PTHREAD_MUTEX_INITIALIZER
+};
+
+void *produce(void *), *consume(void *);
+int main(int argc, char **argv){
+	int i, nthreads, count[MAXNTHREADS];
+	pthread_t tid_produce[MAXNTHREADS], tid_consume;
+	if (argc != 3) {
+		printf("usage: prodcons1 <#items> <#threads>");
+		exit(-1);
+	}
+
+	nitems = min(atoi(argv[1]), MAXNITEMS);
+	nthreads = min(atoi(argv[2]), MAXNTHREADS);
+	/* создание всех производителей и одного потребителя */
+	//Set_concurrency(nthreads + 1);
+	//pthread_create(&tid_consume, NULL, consume, NULL);
+	for (i = 0; i < nthreads; i++) {
+		count[i] = 0;
+		pthread_create(&tid_produce[i], NULL, produce, &count[i]);
+		potok++;
+		//sleep(rand()%1);
+	}
+	pthread_create(&tid_consume, NULL, consume, NULL);
+	/* ожидание завершения производителей и потребителя*/
+	for (i = 0; i < nthreads; i++) {
+		pthread_join(tid_produce[i], NULL);
+		//printf("count[%d] = %d\n", i, count[i]);	
+		printf("Producer #%lu makes %d elements\n", tid_produce[i], count[i]);	
+	}
+	pthread_join(tid_consume, NULL);
+	exit(0);
+}
+void consume_wait(int i){
+	for ( ; ; ) {
+		pthread_mutex_lock(&shared.mutex);
+		//printf("Waiting %d element\n",i);
+		if (i < shared.nput) {
+		        printf("Element %d ready for consume!\n",i);
+			pthread_mutex_unlock(&shared.mutex);
+			return;		/* элемент готов */
+		}
+		printf("Waiting %d element\n",i);
+		pthread_mutex_unlock(&shared.mutex);
+	}
+}
+void *produce(void *arg){
+	sleep(rand()%10);
+	for ( ; ; ) {
+		pthread_mutex_lock(&shared.mutex);
+		if (shared.nput >= nitems) {
+			pthread_mutex_unlock(&shared.mutex);
+			return(NULL);/*массив полный,готово*/
+		}
+		shared.buff[shared.nput] = shared.nval;
+		//printf("Producer #%d make element %d with value %d\n",potok,shared.nput,shared.nval);
+		printf("Producer #%lu make element %d with value %d\n",pthread_self(),shared.nput,shared.nval);
+		shared.nput++;
+		shared.nval++;
+		pthread_mutex_unlock(&shared.mutex);
+		*((int *) arg) += 1;
+		sleep(rand()%1);
+	}
+}
+void *consume(void *arg){
+	int i;
+	for (i = 0; i < nitems; i++) {
+		consume_wait(i);
+		if (shared.buff[i] != i)
+			printf("buff[%d] = %d\n", i, shared.buff[i]);
+	}
+	return(NULL);
+}
+//---------------
+
++===============+
+$ gcc -Wall -o prodcons1 prodcons1.c -std=c99 -lpthread
+$ ./prodcons1 10 5
++===============+
+
+Дополнительные примеры доступены по адресу 
+http://gun.cs.nstu.ru/ssw/Mutex.
+
+?===============?
+3. МЕТОДИЧЕСКИЕ УКАЗАНИЯ. 
+3.1. Для уточнения списка заголовочных файлов, необходимых для вызова функций библиотеки pthread используйте инструкции man и info.
+3.2. Хотя функции работы с потоками описаны в файле включения pthread.h, на самом деле они находятся в библиотеке. Поэтому процесс компиляции и сборки многопоточной программы выполняется в два этапа, например:
+gcc -Wall -c -o test.o test.c
+gcc -Wall -o test test.o <path>libgcc.a –lpthread
+3.3. Библиотеку libgcc.a рекомендуется скопировать в текущий каталог.
+3.4. Для поиска библиотеки средствами файлового менеджера Midnight Commander используйте сочетание клавиш <Alt> - <Shift> - ?
+3.5. Для просмотра результата выполнения программы используйте сочетание клавиш <Ctrl> - O. Они работают и в режиме редактирования файла.
+3.6. Для протоколирования результатов выполнения программ целесообразно использовать перенаправление вывода с консоли в файл: ./test > result.txt
+3.7. Для доступа к файлам на сервере Linux, применяйте протокол ftp, клиентская программа которого имеется в Windows и встроена в файловые менеджеры FAR и TotalCommander. При этом учетная запись и пароль те же, что и при подключении по протоколу ssh.
+
+4. ПОРЯДОК ВЫПОЛНЕНИЯ РАБОТЫ. 
+4.1. Для вариантов заданий написать и отладить программу, реализующую родительский процесс, вызывающий и отслеживающий состояние порожденных потоков.
+4.2. Добавить в написанную программу синхронизацию обращения потоков к какому-либо общему ресурсу, используя взаимные исключения.
+
+5. ВАРИАНТЫ ЗАДАНИЙ. 
+См. варианты заданий в файле variants.txt.
+?===============?
+
+6. КОНТРОЛЬНЫЕ ВОПРОСЫ. 
+1. Чем потоки отличаются от процессов?
+2. Функции создания и завершения потоков.
+3. Зачем и когда необходимо присоединять (join) потоки? Когда и как без этого можно обойтись?
+4. Атрибуты потоков.
+5. Что такое мьютекс?
+6. Особенности инициализации взаимных исключений.
+7. Чем отличаются функции pthread_mutex_trylock и pthread_mutex_unlock?
+8. Когда применение мьютексов не гарантирует синхронизации потоков?
+
+!===============!
+СОСТАВИТЕЛИ:
+Гунько А.В., канд. техн. наук, доц. НГТУ
+Чистяков Н.А., инженер НГТУ
+!===============!
+
+!===============!
+ССЫЛКИ:
+http://gun.cs.nstu.ru/ssw/thread.zip
+http://gun.cs.nstu.ru/ssw/mutex.zip
+http://gun.cs.nstu.ru/ssw/Threadproperties.pps
+http://gun.cs.nstu.ru/ssw/threadattr.pps
+http://gun.cs.nstu.ru/ssw/Mutex/
+http://gun.cs.nstu.ru/ssw/Threads/
+http://www.thegeekstuff.com/2012/04/terminate-c-thread/
+https://computing.llnl.gov/tutorials/pthreads/
+http://citforum.ru/programming/unix/threads/
+https://www.opennet.ru/base/dev/linux_threads.txt.html
+http://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
+https://www.ibm.com/developerworks/ru/library/l-memory-leaks/
+http://tetraquark.ru/archives/47
+http://stackoverflow.com/questions/8513894/pthread-join-and-pthread-exit
+http://faculty.ycp.edu/~dhovemey/spring2011/cs365/lecture/lecture16.html
+!===============!
